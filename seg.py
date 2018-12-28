@@ -13,19 +13,21 @@ import torchvision.models as model
 import torchvision.transforms.functional as TF
 from PIL import Image as image
 import matplotlib.pyplot as plt
-
 # from  matplotlib import pyplot as plt
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
 mask_transform=transforms.Compose([transforms.ToTensor()])
-trainset=my_data((240,320),'data',transform=image_transform,target_transform=mask_transform)
-testset=my_data((240,320),'data',transform=image_transform,target_transform=mask_transform)
+trainset=my_data((240,320),'data',transform=image_transform)
+testset=my_data((240,320),'data',transform=image_transform,target_transform=True)
 loader=dataloader(trainset,batch_size=4,shuffle=True)
 vgg=model.vgg16(pretrained=True)
-device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+# device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+device=torch.device('cpu')
+dtype = torch.float32
+
 class Fcn(nn.Module):
     def __init__(self):
-        super().__init__()
+        super(Fcn,self).__init__()
         self.numclass=21
         self.conv=vgg.features
         self.conv1=nn.Conv2d(512,self.numclass,1)
@@ -64,14 +66,14 @@ def train_fcn():
     # fcn.train()
     criterion=nn.CrossEntropyLoss()
     optimize=torch.optim.Adam(fcn.parameters(),lr=0.001)
-    # fcn=fcn.to(device)
+    fcn=fcn.to(device)
     for i in range(1):
         for img,tag in  loader:
             # print ("input shape")
             # print(img.shape)
             # label_test=lable_data.numpy().argmax(axis=1)
             # lable_data=torch.unsqueeze(lable_data,1)
-            input_data,lable_data=img.to(device),tag.to(device)
+            input_data,lable_data=img.to(device,dtype=dtype),tag.to(device,dtype=torch.long)
             optimize.zero_grad()
             output=fcn(input_data)
             # print("output shape")
