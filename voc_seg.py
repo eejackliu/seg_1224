@@ -35,13 +35,13 @@ class my_data(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         img=image.open(self.image[index]).convert('RGB')
-        target=image.open(self.mask[index])
+        target=image.open(self.mask[index]).convert('RGB')
         i,j,h,w=transforms.RandomCrop.get_params(img,self.shape)
         img=TF.crop(img,i,j,h,w)
         target=TF.crop(target,i,j,h,w)
-        if self.target_transform :
+        if not self.target_transform :
             return self.transform(img),target
-        target=np.array(target)
+        target=np.array(target).transpose(2,0,1)
         target=(target[0]*256+target[1])*256+target[2]
         target=self.class_index[target]
         return self.transform(img),target

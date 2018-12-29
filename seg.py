@@ -17,8 +17,8 @@ import matplotlib.pyplot as plt
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
 mask_transform=transforms.Compose([transforms.ToTensor()])
-trainset=my_data((240,320),'data',transform=image_transform)
-testset=my_data((240,320),'data',transform=image_transform,target_transform=True)
+trainset=my_data((224,320),'data',transform=image_transform,target_transform=True)
+testset=my_data((224,320),'data',transform=image_transform)
 loader=dataloader(trainset,batch_size=4,shuffle=True)
 vgg=model.vgg16(pretrained=True)
 # device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
@@ -125,17 +125,44 @@ def picture(img,de_normal=False):
         plt.subplot(num,i,1)
         plt.imshow(j)
     plt.show()
-
+#
+# from skimage import io
+# path='data/VOCdevkit/VOC2012/SegmentationClass/2007_000033.png'
+# # pict=image.open(path)
+# pic=io.imread(path)
+# # pic=np.array(pict)
+# d=pic[150:200,0:50]
+# f=d[40:42 ,40:42]
 
 model=train_fcn()
 test(model)
+#
+# def bilinear_kernel(in_channels, out_channels, kernel_size):
+#         factor = (kernel_size + 1) // 2
+#         if kernel_size % 2 == 1:
+#             center = factor - 1
+#         else:
+#             center = factor - 0.5
+#         og = np.ogrid[:kernel_size, :kernel_size]
+#         filt = (1 - abs(og[0] - center) / factor) * \
+#                (1 - abs(og[1] - center) / factor)
+#         weight = np.zeros(
+#             (in_channels, out_channels, kernel_size, kernel_size),
+#             dtype='float32')
+#         weight[range(in_channels), range(out_channels), :, :] = filt
+#         weight=torch.from_numpy(weight)
+#         weight.requires_grad=True
+#         return weight
 
 
-
-
-
-
-
+# a=torch.zeros((1,3,224,320))
+#
+# b=vgg.features(a)
+# print b.shape
+# w1=torch.zeros((21,512,1,1))
+# c=nn.functional.conv2d(b,w1)
+# w2=bilinear_kernel(21,21,64)
+# d=nn.functional.conv_transpose2d(c,w2,stride=32,padding=16)
 
 
 
