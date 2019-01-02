@@ -21,8 +21,8 @@ testset=my_data((96,224),'data',transform=image_transform,target_transform=mask_
 loader=dataloader(trainset,batch_size=4,shuffle=True)
 test_loader=dataloader(testset,batch_size=4,)
 vgg=model.vgg16(pretrained=True)
-# device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-device=torch.device('cpu')
+device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+#device=torch.device('cpu')
 dtype = torch.float32
 
 class Fcn(nn.Module):
@@ -101,25 +101,34 @@ def test(model):
     with torch.no_grad():
         model.to(device)
         img,tag=next(iter(test_loader))
-        tt=img
+        img=img.to(device)
         output=model(img)
         label=output.argmax(dim=1)
-        tmp=label.numpy()
+        tmp=label.cpu()
     img=label2image(tmp)
 
-    picture(tt,tag.numpy().transpose(0,2,3,1),de_normal=True)
+    pic_pred(img,tag)
 def label2image(pred):
 
     colormap=np.array(voc_colormap)
     return colormap[pred]
+def pic_pred(img,tag):
+    num=len(img)
+    tag=tag.numpy().transpose(0,2,3,1)
+    tmp=np.concatenate((img,tag),axis=0)
+    for i,j in enumerate(tmp,1):
+        plt.subplot(2,num,i)
+        plt.imshow(j)
+    plt.show()
 def picture(img,tag,de_normal=False):
     # torchvision.utils.make_grid() picture must be numpy
     mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
     num=len(img)
     # N=len(img)
-    tmp=img.numpy().transpose(0,2,3,1)
+    tmp=img.transpose(0,2,3,1)
+    tag=tag.numpy().transpose(0,2,3,1)
     if de_normal:
-         tmp = img.numpy().transpose(0,2,3,1)
+         tmp = img.transpose(0,2,3,1)
          # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
          tmp=tmp*std+mean
     tmp=np.concatenate((tmp,tag),axis=0)
