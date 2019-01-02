@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader as dataloader
 import random
 from voc_seg import my_data
 import torchvision.models as model
-
 import torchvision.transforms.functional as TF
 from PIL import Image as image
 import matplotlib.pyplot as plt
@@ -17,9 +16,10 @@ import matplotlib.pyplot as plt
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
 mask_transform=transforms.Compose([transforms.ToTensor()])
-trainset=my_data((224,320),'data',transform=image_transform,target_transform=True)
-testset=my_data((224,320),'data',transform=image_transform)
+trainset=my_data((96,224),'data',transform=image_transform)
+testset=my_data((96,224),'data',transform=image_transform,target_transform=mask_transform)
 loader=dataloader(trainset,batch_size=4,shuffle=True)
+test_loader=dataloader(testset,batch_size=4,)
 vgg=model.vgg16(pretrained=True)
 # device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 device=torch.device('cpu')
@@ -85,7 +85,7 @@ def train_fcn():
             print (loss)
             loss.backward()
             optimize.step()
-            # break
+            break
         break
     return  fcn
 
@@ -100,42 +100,49 @@ def test(model):
     tmp=0
     with torch.no_grad():
         model.to(device)
-        img,tag=dataloader(testset,batch_size=4)
+        img,tag=next(iter(test_loader))
+        tt=img
         output=model(img)
         label=output.argmax(dim=1)
         tmp=label.numpy()
     img=label2image(tmp)
-    picture(img,de_normal=True)
-    picture(tag)
+
+    picture(tt,tag.numpy().transpose(0,2,3,1),de_normal=True)
 def label2image(pred):
 
     colormap=np.array(voc_colormap)
     return colormap[pred]
-def picture(img,de_normal=False):
+def picture(img,tag,de_normal=False):
     # torchvision.utils.make_grid() picture must be numpy
-    mean,std=np.array((-0.485, -0.456, -0.406)),np.array((1/0.229, 1/0.224, 1/0.225))
-    image=img.transpose(0,2,3,1)
-    num=len(image)
-    tmp=image
+    mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
+    num=len(img)
+    # N=len(img)
+    tmp=img.numpy().transpose(0,2,3,1)
     if de_normal:
-         mean,std=np.array(mean),np.array(std)
-         mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
-         tmp=image*std+mean
+         tmp = img.numpy().transpose(0,2,3,1)
+         # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
+         tmp=tmp*std+mean
+    tmp=np.concatenate((tmp,tag),axis=0)
     for i,j in enumerate(tmp,1):
-        plt.subplot(num,i,1)
+        plt.subplot(2,num,i)
         plt.imshow(j)
+    # _,ax=plt.subplots(1,num)
+    # for i,j in enumerate(ax):
+    #     j.imshow(tmp[i])
     plt.show()
 #
 # from skimage import io
 # path='data/VOCdevkit/VOC2012/SegmentationClass/2007_000033.png'
-# # pict=image.open(path)
+# pict=image.open(path).convert('RGB')
 # pic=io.imread(path)
-# # pic=np.array(pict)
+# pic=np.array(pict)
 # d=pic[150:200,0:50]
 # f=d[40:42 ,40:42]
-
-model=train_fcn()
-test(model)
+# model=train_fcn()
+# torch.save(model.state_dict(),'model')
+test_model=Fcn()
+test_model.load_state_dict(torch.load('model'))
+test(test_model)
 #
 # def bilinear_kernel(in_channels, out_channels, kernel_size):
 #         factor = (kernel_size + 1) // 2
@@ -187,6 +194,6 @@ test(model)
 #         h=w=500
 #         for i in a:
 #                 m,n=image.open(path_b+i.rstrip('\n')+'.jpg').size
-#                 h=m if h>m else h
-#                 w=n if w>n else n
+#                 w=m if w>m else w
+#                 h=n if h>n else h
 # print h,w

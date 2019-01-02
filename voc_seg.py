@@ -12,7 +12,7 @@ voc_colormap = [[0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
                 [0, 64, 0], [128, 64, 0], [0, 192, 0], [128, 192, 0],
                 [0, 64, 128]]
 class my_data(torch.utils.data.Dataset):
-    def __init__(self,data_size,root,image_set='train',transform=None,target_transform=False):
+    def __init__(self,data_size,root,image_set='train',transform=None,target_transform=None):
         self.shape=data_size
         self.root=os.path.expanduser(root)
         self.transform=transform
@@ -39,8 +39,8 @@ class my_data(torch.utils.data.Dataset):
         i,j,h,w=transforms.RandomCrop.get_params(img,self.shape)
         img=TF.crop(img,i,j,h,w)
         target=TF.crop(target,i,j,h,w)
-        if not self.target_transform :
-            return self.transform(img),target
+        if  self.target_transform is not None:
+            return self.transform(img),self.target_transform(target)
         target=np.array(target).transpose(2,0,1)
         target=(target[0]*256+target[1])*256+target[2]
         target=self.class_index[target]
