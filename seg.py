@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader as dataloader
 import random
 from voc_seg import my_data
 import torchvision.models as model
+
 import torchvision.transforms.functional as TF
 from PIL import Image as image
 import matplotlib.pyplot as plt
@@ -102,17 +103,19 @@ def test(model):
         model.to(device)
         img,tag=next(iter(test_loader))
         img=img.to(device)
+        picture(img.numpy(),tag.numpy(),de_normal=True)
         output=model(img)
         label=output.argmax(dim=1)
         tmp=label.cpu()
-    img=label2image(tmp)
+    img_fin=label2image(tmp)
 
-    pic_pred(img,tag)
+    pic_pred(img_fin,tag)
 def label2image(pred):
 
     colormap=np.array(voc_colormap)
     return colormap[pred]
 def pic_pred(img,tag):
+    plt.figure()
     num=len(img)
     tag=tag.numpy().transpose(0,2,3,1)
     tmp=np.concatenate((img,tag),axis=0)
@@ -122,11 +125,12 @@ def pic_pred(img,tag):
     plt.show()
 def picture(img,tag,de_normal=False):
     # torchvision.utils.make_grid() picture must be numpy
+    plt.figure()
     mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
     num=len(img)
     # N=len(img)
     tmp=img.transpose(0,2,3,1)
-    tag=tag.numpy().transpose(0,2,3,1)
+    tag=tag.transpose(0,2,3,1)
     if de_normal:
          tmp = img.transpose(0,2,3,1)
          # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
