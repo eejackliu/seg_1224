@@ -7,9 +7,8 @@ import torchvision.transforms as transforms
 from torch.utils.data import sampler
 from torch.utils.data import DataLoader as dataloader
 import random
-from voc_seg import my_data
+from voc_seg import my_data,voc_colormap
 import torchvision.models as model
-
 import torchvision.transforms.functional as TF
 from PIL import Image as image
 import matplotlib.pyplot as plt
@@ -20,12 +19,12 @@ mask_transform=transforms.Compose([transforms.ToTensor()])
 trainset=my_data((96,224),'data',transform=image_transform)
 testset=my_data((96,224),'data',transform=image_transform,target_transform=mask_transform)
 loader=dataloader(trainset,batch_size=4,shuffle=True)
-test_loader=dataloader(testset,batch_size=4,)
+test_loader=dataloader(testset,batch_size=4,shuffle=True)
 vgg=model.vgg16(pretrained=True)
-device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-#device=torch.device('cpu')
+# device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+device=torch.device('cpu')
 dtype = torch.float32
-
+class_num=21
 class Fcn(nn.Module):
     def __init__(self):
         super(Fcn,self).__init__()
@@ -54,16 +53,13 @@ class Fcn(nn.Module):
         return weight
     def forward(self, input):
         x=self.conv(input)
-        # print("forward")
-        # print (x.shape)
         x=self.conv1(x)
-        # print("one")
-        # print (x.shape)
         x=self.tran_conv(x)
         return x
 def train_fcn():
 
     fcn=Fcn()
+    fcn.train()
     # fcn.train()
     criterion=nn.CrossEntropyLoss()
     optimize=torch.optim.Adam(fcn.parameters(),lr=0.001)
@@ -89,61 +85,127 @@ def train_fcn():
             break
         break
     return  fcn
-
-voc_colormap = [[0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
-                [0, 0, 128], [128, 0, 128], [0, 128, 128], [128, 128, 128],
-                [64, 0, 0], [192, 0, 0], [64, 128, 0], [192, 128, 0],
-                [64, 0, 128], [192, 0, 128], [64, 128, 128], [192, 128, 128],
-                [0, 64, 0], [128, 64, 0], [0, 192, 0], [128, 192, 0],
-                [0, 64, 128]]
-
 def test(model):
-    tmp=0
+    img_list=tag_list=seg_list=[]
     with torch.no_grad():
         model.to(device)
-        img,tag=next(iter(test_loader))
-        img=img.to(device)
-        picture(img.numpy(),tag.numpy(),de_normal=True)
-        output=model(img)
-        label=output.argmax(dim=1)
-        tmp=label.cpu()
-    img_fin=label2image(tmp)
-
-    pic_pred(img_fin,tag)
+        model.eval()
+        # img,tag=next(iter(test_loader))
+        for img,tag in test_loader:
+            img=img.to(device)
+            img_list.append(img)
+            tag_list.append(tag)
+            output=model(img)
+            label=output.argmax(dim=1)
+            tmp=label.cpu()
+            img_final=torch.from_numpy(label2image(tmp))
+            seg_list.append(img_final)
+        img=torch.cat(img_list,dim=0)
+        tag=torch.cat(tag_list,dim=0)
+        seg=torch.cat(seg_list,dim=0)
+    score=iou(seg,tag)
+    pic_pred(img[0:4].numpy(),tag[0:4].numpy(),seg[0:4].numpy())
 def label2image(pred):
-
     colormap=np.array(voc_colormap)
     return colormap[pred]
-def pic_pred(img,tag):
+def pic_pred(img,tag,pred):
     plt.figure()
     num=len(img)
-    tag=tag.numpy().transpose(0,2,3,1)
-    tmp=np.concatenate((img,tag),axis=0)
-    for i,j in enumerate(tmp,1):
-        plt.subplot(2,num,i)
-        plt.imshow(j)
-    plt.show()
-def picture(img,tag,de_normal=False):
-    # torchvision.utils.make_grid() picture must be numpy
-    plt.figure()
-    mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
-    num=len(img)
-    # N=len(img)
-    tmp=img.transpose(0,2,3,1)
+    img=img.transpose(0,2,3,1) #because the broading-cast(numpy would increase the axes at the left,the anti-normal must at NHWC)
     tag=tag.transpose(0,2,3,1)
-    if de_normal:
-         tmp = img.transpose(0,2,3,1)
-         # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
-         tmp=tmp*std+mean
-    tmp=np.concatenate((tmp,tag),axis=0)
+    mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
+    img=img*std+mean
+    tmp=np.concatenate((img,tag,pred/255.0),axis=0)
     for i,j in enumerate(tmp,1):
-        plt.subplot(2,num,i)
+        plt.subplot(3,num,i)
         plt.imshow(j)
-    # _,ax=plt.subplots(1,num)
-    # for i,j in enumerate(ax):
-    #     j.imshow(tmp[i])
     plt.show()
-#
+
+def my_iou(img,tag):
+    img=img.long()
+    tag=tag.long()
+    intersaction=(img==tag)
+    union=img+tag
+    union=torch.where(union>0)
+    iou=intersaction.float().sum()/union.float().sum()
+    return iou/class_num
+def iou(img,tag):
+    img=img.long().view(-1)
+    tag=tag.long().view(-1)
+
+    cls_iou=[]
+    for i in range(1,class_num):
+        tmp_img=(img==i)
+        tmp_tag=(tag==i)
+        intersaction=tmp_tag[tmp_img].float().sum()
+        union=tmp_img.float().sum()+tmp_tag.float().sum()-intersaction
+        if intersaction ==0:
+            cls_iou.append(0)
+            continue
+        cls_iou.append(intersaction.to(torch.float).sum()/union.sum())
+    average=np.array(cls_iou)
+    return average.mean()
+
+
+test_model=Fcn()
+test_model.load_state_dict(torch.load('model',map_location='cpu'))
+# test(test_model)
+img_list=[]
+tag_list=[]
+seg_list = []
+model=test_model
+with torch.no_grad():
+    model.to(device)
+    model.eval()
+    # img,tag=next(iter(test_loader))
+    # for img, tag in test_loader:
+    img,tag=next(iter(test_loader))
+    img = img.to(device)
+    img_list.append(img)
+    tag_list.append(tag)
+    output = model(img)
+    label = output.argmax(dim=1)
+    tmp = label.cpu()
+    img_final = torch.from_numpy(label2image(tmp))
+    seg_list.append(img_final)
+
+    img, tag = next(iter(test_loader))
+    img = img.to(device)
+    img_list.append(img)
+    tag_list.append(tag)
+    output = model(img)
+    label = output.argmax(dim=1)
+    tmp = label.cpu()
+    img_final = torch.from_numpy(label2image(tmp))
+    seg_list.append(img_final)
+
+    img = torch.cat(img_list, dim=0)
+    tag = torch.cat(tag_list, dim=0)
+    seg = torch.cat(seg_list, dim=0)
+score = iou(seg, tag)
+pic_pred(img[0:4].numpy(), tag[0:4].numpy(), seg[0:4].numpy())
+
+# def picture(img,tag,de_normal=False):
+#     # torchvision.utils.make_grid() picture must be numpy
+#     plt.figure()
+#     mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
+#     num=len(img)
+#     # N=len(img)
+#     tmp=img.transpose(0,2,3,1)
+#     tag=tag.transpose(0,2,3,1)
+#     if de_normal:
+#          tmp = img.transpose(0,2,3,1)
+#          # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
+#          tmp=tmp*std+mean
+#     tmp=np.concatenate((tmp,tag),axis=0)
+#     for i,j in enumerate(tmp,1):
+#         plt.subplot(2,num,i)
+#         plt.imshow(j)
+#     # _,ax=plt.subplots(1,num)
+#     # for i,j in enumerate(ax):
+#     #     j.imshow(tmp[i])
+#     plt.show()
+# #
 # from skimage import io
 # path='data/VOCdevkit/VOC2012/SegmentationClass/2007_000033.png'
 # pict=image.open(path).convert('RGB')
@@ -153,27 +215,9 @@ def picture(img,tag,de_normal=False):
 # f=d[40:42 ,40:42]
 # model=train_fcn()
 # torch.save(model.state_dict(),'model')
-test_model=Fcn()
-test_model.load_state_dict(torch.load('model'))
-test(test_model)
-#
-# def bilinear_kernel(in_channels, out_channels, kernel_size):
-#         factor = (kernel_size + 1) // 2
-#         if kernel_size % 2 == 1:
-#             center = factor - 1
-#         else:
-#             center = factor - 0.5
-#         og = np.ogrid[:kernel_size, :kernel_size]
-#         filt = (1 - abs(og[0] - center) / factor) * \
-#                (1 - abs(og[1] - center) / factor)
-#         weight = np.zeros(
-#             (in_channels, out_channels, kernel_size, kernel_size),
-#             dtype='float32')
-#         weight[range(in_channels), range(out_channels), :, :] = filt
-#         weight=torch.from_numpy(weight)
-#         weight.requires_grad=True
-#         return weight
 
+
+#
 
 # a=torch.zeros((1,3,224,320))
 #

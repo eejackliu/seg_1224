@@ -12,6 +12,7 @@ voc_colormap = [[0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
                 [0, 64, 0], [128, 64, 0], [0, 192, 0], [128, 192, 0],
                 [0, 64, 128]]
 class my_data(torch.utils.data.Dataset):
+    #if target_transform=mask_transform is
     def __init__(self,data_size,root,image_set='train',transform=None,target_transform=None):
         self.shape=data_size
         self.root=os.path.expanduser(root)
