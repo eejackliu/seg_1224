@@ -15,14 +15,14 @@ import matplotlib.pyplot as plt
 # from  matplotlib import pyplot as plt
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
-mask_transform=transforms.Compose([transforms.ToTensor()])
+mask_transform=transforms.Compose([transforms.ToTensor()])# to_tensor will make it from nhwc to nchw
 trainset=my_data((96,224),'data',transform=image_transform)
-testset=my_data((96,224),'data',transform=image_transform,target_transform=mask_transform)
-loader=dataloader(trainset,batch_size=4,shuffle=True)
-test_loader=dataloader(testset,batch_size=4,shuffle=True)
+testset=my_data((96,224),'data',transform=image_transform)
+loader=dataloader(trainset,batch_size=32,shuffle=True)
+test_loader=dataloader(testset,batch_size=4)
 vgg=model.vgg16(pretrained=True)
-# device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-device=torch.device('cpu')
+device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+# device=torch.device('cpu')
 dtype = torch.float32
 class_num=21
 class Fcn(nn.Module):
@@ -64,7 +64,7 @@ def train_fcn():
     criterion=nn.CrossEntropyLoss()
     optimize=torch.optim.Adam(fcn.parameters(),lr=0.001)
     fcn=fcn.to(device)
-    for i in range(1):
+    for i in range(256):
         for img,tag in  loader:
             # print ("input shape")
             # print(img.shape)
@@ -82,11 +82,11 @@ def train_fcn():
             print (loss)
             loss.backward()
             optimize.step()
-            break
-        break
     return  fcn
 def test(model):
-    img_list=tag_list=seg_list=[]
+    img_list=[]
+    tag_list=[]
+    seg_list=[]
     with torch.no_grad():
         model.to(device)
         model.eval()
@@ -112,10 +112,10 @@ def pic_pred(img,tag,pred):
     plt.figure()
     num=len(img)
     img=img.transpose(0,2,3,1) #because the broading-cast(numpy would increase the axes at the left,the anti-normal must at NHWC)
-    tag=tag.transpose(0,2,3,1)
+    # tag=tag.transpose(0,2,3,1)
     mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
     img=img*std+mean
-    tmp=np.concatenate((img,tag,pred/255.0),axis=0)
+    tmp=np.concatenate((img,tag/255.0,pred/255.0),axis=0)
     for i,j in enumerate(tmp,1):
         plt.subplot(3,num,i)
         plt.imshow(j)
@@ -130,6 +130,8 @@ def my_iou(img,tag):
     iou=intersaction.float().sum()/union.float().sum()
     return iou/class_num
 def iou(img,tag):
+    img=img.to(device)
+    tag=tag.to(device)
     img=img.long().view(-1)
     tag=tag.long().view(-1)
 
@@ -140,12 +142,30 @@ def iou(img,tag):
         intersaction=tmp_tag[tmp_img].float().sum()
         union=tmp_img.float().sum()+tmp_tag.float().sum()-intersaction
         if intersaction ==0:
-            cls_iou.append(0)
+            cls_iou.append(torch.tensor(0.,device=device))
             continue
         cls_iou.append(intersaction.to(torch.float).sum()/union.sum())
-    average=np.array(cls_iou)
-    return average.mean()
-
+    average=torch.tensor(cls_iou)
+    return average.mean(),average
+# model=train_fcn()
+# torch.save(model.state_dict(),'model')
+def picture(img,tag,de_normal=False):
+    # torchvision.utils.make_grid() picture must be numpy
+    plt.figure()
+    mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
+    num=len(img)
+    # N=len(img)
+    # tmp=img.transpose(0,2,3,1)
+    # tag=tag.transpose(0,2,3,1)
+    if de_normal:
+         tmp = img.transpose(0,2,3,1)
+         # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
+         tmp=tmp*std+mean
+    tmp=np.concatenate((tmp,tag),axis=0)
+    for i,j in enumerate(tmp,1):
+        plt.subplot(2,num,i)
+        plt.imshow(j)
+    plt.show()
 
 test_model=Fcn()
 test_model.load_state_dict(torch.load('model',map_location='cpu'))
@@ -154,57 +174,30 @@ img_list=[]
 tag_list=[]
 seg_list = []
 model=test_model
+
 with torch.no_grad():
     model.to(device)
     model.eval()
     # img,tag=next(iter(test_loader))
-    # for img, tag in test_loader:
-    img,tag=next(iter(test_loader))
-    img = img.to(device)
-    img_list.append(img)
-    tag_list.append(tag)
-    output = model(img)
-    label = output.argmax(dim=1)
-    tmp = label.cpu()
-    img_final = torch.from_numpy(label2image(tmp))
-    seg_list.append(img_final)
-
-    img, tag = next(iter(test_loader))
-    img = img.to(device)
-    img_list.append(img)
-    tag_list.append(tag)
-    output = model(img)
-    label = output.argmax(dim=1)
-    tmp = label.cpu()
-    img_final = torch.from_numpy(label2image(tmp))
-    seg_list.append(img_final)
+    for img, tag in test_loader:
+        # img,tag=next(iter(test_loader))
+        img = img.to(device)
+        img_list.append(img)
+        tag_list.append(tag)
+        output = model(img)
+        label = output.argmax(dim=1)
+        tmp = label.cpu()
+        seg_list.append(tmp)
 
     img = torch.cat(img_list, dim=0)
     tag = torch.cat(tag_list, dim=0)
     seg = torch.cat(seg_list, dim=0)
-score = iou(seg, tag)
-pic_pred(img[0:4].numpy(), tag[0:4].numpy(), seg[0:4].numpy())
+    score,score_list = iou(seg, tag)
+    img_final = torch.from_numpy(label2image(tmp))
+# pic_pred(img[0:4].cpu().numpy(), label2image(tag[0:4].numpy().astype(np.int)), label2image(seg[0:4].numpy()))
 
-# def picture(img,tag,de_normal=False):
-#     # torchvision.utils.make_grid() picture must be numpy
-#     plt.figure()
-#     mean,std=np.array((0.485, 0.456, 0.406)),np.array((0.229, 0.224, 0.225))
-#     num=len(img)
-#     # N=len(img)
-#     tmp=img.transpose(0,2,3,1)
-#     tag=tag.transpose(0,2,3,1)
-#     if de_normal:
-#          tmp = img.transpose(0,2,3,1)
-#          # mean,std=np.tile(mean,(num,1)),np.tile(std,(num,1))
-#          tmp=tmp*std+mean
-#     tmp=np.concatenate((tmp,tag),axis=0)
-#     for i,j in enumerate(tmp,1):
-#         plt.subplot(2,num,i)
-#         plt.imshow(j)
-#     # _,ax=plt.subplots(1,num)
-#     # for i,j in enumerate(ax):
-#     #     j.imshow(tmp[i])
-#     plt.show()
+picture(img[0:4].cpu().numpy(),label2image(tag[0:4].numpy().astype(np.int)),de_normal=True)
+
 # #
 # from skimage import io
 # path='data/VOCdevkit/VOC2012/SegmentationClass/2007_000033.png'
