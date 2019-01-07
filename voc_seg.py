@@ -42,7 +42,7 @@ class my_data(torch.utils.data.Dataset):
         target=TF.crop(target,i,j,h,w)
         if  self.target_transform is not None:
             return self.transform(img),self.target_transform(target)
-        target=np.array(target).transpose(2,0,1)
+        target=np.array(target).transpose(2,0,1).astype(np.int32)
         target=(target[0]*256+target[1])*256+target[2]
         target=self.class_index[target]
         return self.transform(img),target
