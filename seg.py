@@ -12,19 +12,25 @@ import torchvision.models as model
 import torchvision.transforms.functional as TF
 from PIL import Image as image
 import matplotlib.pyplot as plt
+import nonechucks as nc
 # from  matplotlib import pyplot as plt
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
 mask_transform=transforms.Compose([transforms.ToTensor()])# to_tensor will make it from nhwc to nchw
-trainset=my_data((96,224),'data',transform=image_transform)
+trainset=my_data((500 ,500),'data',transform=image_transform)
+trainset=nc.SafeDataset(trainset)
 testset=my_data((96,224),'data',transform=image_transform)
-loader=dataloader(trainset,batch_size=32,shuffle=True)
+# loader=dataloader(trainset,batch_size=32,shuffle=True)
+loader=nc.SafeDataLoader(trainset,batch_size=32)
 test_loader=dataloader(testset,batch_size=4)
 vgg=model.vgg16(pretrained=True)
 device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-# device=torch.device('cpu')
-dtype = torch.float32
+device=torch.device('cpu')
+# dtype = torch.float32
+#%%
+a,b=next(iter(loader))
 class_num=21
+#%%
 class Fcn(nn.Module):
     def __init__(self):
         super(Fcn,self).__init__()
@@ -64,7 +70,7 @@ def train_fcn():
     criterion=nn.CrossEntropyLoss()
     optimize=torch.optim.Adam(fcn.parameters(),lr=0.001)
     fcn=fcn.to(device)
-    for i in range(256):
+    for i in range(156):
         for img,tag in  loader:
             # print ("input shape")
             # print(img.shape)
@@ -120,7 +126,7 @@ def pic_pred(img,tag,pred):
         plt.subplot(3,num,i)
         plt.imshow(j)
     plt.show()
-
+torchvision.utils.make_grid()
 def my_iou(img,tag):
     img=img.long()
     tag=tag.long()
@@ -147,8 +153,8 @@ def iou(img,tag):
         cls_iou.append(intersaction.to(torch.float).sum()/union.sum())
     average=torch.tensor(cls_iou)
     return average.mean(),average
-# model=train_fcn()
-# torch.save(model.state_dict(),'model')
+#model=train_fcn()
+#torch.save(model.state_dict(),'model')
 def picture(img,tag,de_normal=False):
     # torchvision.utils.make_grid() picture must be numpy
     plt.figure()
@@ -167,36 +173,36 @@ def picture(img,tag,de_normal=False):
         plt.imshow(j)
     plt.show()
 
-test_model=Fcn()
-test_model.load_state_dict(torch.load('model',map_location='cpu'))
-# test(test_model)
-img_list=[]
-tag_list=[]
-seg_list = []
-model=test_model
+# test_model=Fcn()
+# test_model.load_state_dict(torch.load('model',map_location='cpu'))
+# # test(test_model)
+# img_list=[]
+# tag_list=[]
+# seg_list = []
+# model=test_model
 
-with torch.no_grad():
-    model.to(device)
-    model.eval()
-    # img,tag=next(iter(test_loader))
-    for img, tag in test_loader:
-        # img,tag=next(iter(test_loader))
-        img = img.to(device)
-        img_list.append(img)
-        tag_list.append(tag)
-        output = model(img)
-        label = output.argmax(dim=1)
-        tmp = label.cpu()
-        seg_list.append(tmp)
-
-    img = torch.cat(img_list, dim=0)
-    tag = torch.cat(tag_list, dim=0)
-    seg = torch.cat(seg_list, dim=0)
-    score,score_list = iou(seg, tag)
-    img_final = torch.from_numpy(label2image(tmp))
+# with torch.no_grad():
+#     model.to(device)
+#     model.eval()
+#     # img,tag=next(iter(test_loader))
+#     for img, tag in test_loader:
+#         # img,tag=next(iter(test_loader))
+#         img = img.to(device)
+#         img_list.append(img)
+#         tag_list.append(tag)
+#         output = model(img)
+#         label = output.argmax(dim=1)
+#         tmp = label.cpu()
+#         seg_list.append(tmp)
+#
+#     img = torch.cat(img_list, dim=0)
+#     tag = torch.cat(tag_list, dim=0)
+#     seg = torch.cat(seg_list, dim=0)
+#     score,score_list = iou(seg, tag)
+#     img_final = torch.from_numpy(label2image(tmp))
 # pic_pred(img[0:4].cpu().numpy(), label2image(tag[0:4].numpy().astype(np.int)), label2image(seg[0:4].numpy()))
 
-picture(img[0:4].cpu().numpy(),label2image(tag[0:4].numpy().astype(np.int)),de_normal=True)
+#picture(img[0:4].cpu().numpy(),label2image(tag[0:4].numpy().astype(np.int)),de_normal=True)
 
 # #
 # from skimage import io

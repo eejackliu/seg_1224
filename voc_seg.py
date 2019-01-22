@@ -38,6 +38,8 @@ class my_data(torch.utils.data.Dataset):
         img=image.open(self.image[index]).convert('RGB')
         target=image.open(self.mask[index]).convert('RGB')
         i,j,h,w=transforms.RandomCrop.get_params(img,self.shape)
+        if i<0 or j<0 or h <0 or w<0:
+            return None,None
         img=TF.crop(img,i,j,h,w)
         target=TF.crop(target,i,j,h,w)
         if  self.target_transform is not None:
