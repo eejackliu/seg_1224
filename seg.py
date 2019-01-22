@@ -65,9 +65,11 @@ class Fcn(nn.Module):
         return x
 class FCN_16(nn.Module):
     def __init__(self):
+        super(FCN_16,self).__init__()
         self.pool4=vgg.features[:24]
         self.conv=vgg.features[24:]
-        self.conv1=nn.Conv2d(512,21,1)
+        self.conv_pool5=nn.Conv2d(512,21,1)
+        self.conv_pool4=nn.Conv2d(512,21,1)
         self.tran_conv1=nn.ConvTranspose2d(21,21,4,2,1)
         self.tran_conv2=nn.ConvTranspose2d(21,21,32,16,8)
         self.tran_conv1.weight=torch.nn.Parameter(bilinear_kernel(21,21,4))
@@ -75,13 +77,13 @@ class FCN_16(nn.Module):
     def forward(self, input):
         pool4=self.pool4(input)
         x=self.conv(pool4)
-        x=self.conv1(x)
+        x=self.conv_pool5(x)
         x_up=self.tran_conv1(x)
-        x_16=self.tran_conv2(x_up+pool4)
+        x_16=self.tran_conv2(x_up+self.conv_pool4(pool4))
         return x_16
 def train_fcn():
 
-    fcn=Fcn()
+    fcn=FCN_16()
     fcn.train()
     # fcn.train()
     criterion=nn.CrossEntropyLoss()
