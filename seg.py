@@ -17,20 +17,37 @@ import nonechucks as nc
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
                                     ])
 mask_transform=transforms.Compose([transforms.ToTensor()])# to_tensor will make it from nhwc to nchw
-trainset=my_data((500 ,500),'data',transform=image_transform)
+trainset=my_data((320,224),'data',transform=image_transform)
 trainset=nc.SafeDataset(trainset)
 testset=my_data((96,224),'data',transform=image_transform)
 # loader=dataloader(trainset,batch_size=32,shuffle=True)
-loader=nc.SafeDataLoader(trainset,batch_size=32)
-test_loader=dataloader(testset,batch_size=4)
+loader=nc.SafeDataLoader(trainset,batch_size=4)
+# test_loader=dataloader(testset,batch_size=4)
 vgg=model.vgg16(pretrained=True)
 device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 device=torch.device('cpu')
-# dtype = torch.float32
+dtype = torch.float32
 #%%
 a,b=next(iter(loader))
 class_num=21
+
 #%%
+def bilinear_kernel( in_channels, out_channels, kernel_size):
+    factor = (kernel_size + 1) // 2
+    if kernel_size % 2 == 1:
+        center = factor - 1
+    else:
+        center = factor - 0.5
+    og = np.ogrid[:kernel_size, :kernel_size]
+    filt = (1 - abs(og[0] - center) / factor) * \
+           (1 - abs(og[1] - center) / factor)
+    weight = np.zeros(
+        (in_channels, out_channels, kernel_size, kernel_size),
+        dtype='float32')
+    weight[range(in_channels), range(out_channels), :, :] = filt
+    weight = torch.from_numpy(weight)
+    weight.requires_grad = True
+    return weight
 class Fcn(nn.Module):
     def __init__(self):
         super(Fcn,self).__init__()
@@ -40,28 +57,28 @@ class Fcn(nn.Module):
         nn.init.xavier_uniform_(self.conv1.weight)
         # nn.init.xavier_normal_(self.conv1.weight)
         self.tran_conv=nn.ConvTranspose2d(self.numclass,self.numclass,64,32,16)
-        self.tran_conv.weight=torch.nn.Parameter(self.bilinear_kernel(21,21,64))
-    def bilinear_kernel(self,in_channels, out_channels, kernel_size):
-        factor = (kernel_size + 1) // 2
-        if kernel_size % 2 == 1:
-            center = factor - 1
-        else:
-            center = factor - 0.5
-        og = np.ogrid[:kernel_size, :kernel_size]
-        filt = (1 - abs(og[0] - center) / factor) * \
-               (1 - abs(og[1] - center) / factor)
-        weight = np.zeros(
-            (in_channels, out_channels, kernel_size, kernel_size),
-            dtype='float32')
-        weight[range(in_channels), range(out_channels), :, :] = filt
-        weight=torch.from_numpy(weight)
-        weight.requires_grad=True
-        return weight
+        self.tran_conv.weight=torch.nn.Parameter(bilinear_kernel(21,21,64))
     def forward(self, input):
         x=self.conv(input)
         x=self.conv1(x)
         x=self.tran_conv(x)
         return x
+class FCN_16(nn.Module):
+    def __init__(self):
+        self.pool4=vgg.features[:24]
+        self.conv=vgg.features[24:]
+        self.conv1=nn.Conv2d(512,21,1)
+        self.tran_conv1=nn.ConvTranspose2d(21,21,4,2,1)
+        self.tran_conv2=nn.ConvTranspose2d(21,21,32,16,8)
+        self.tran_conv1.weight=torch.nn.Parameter(bilinear_kernel(21,21,4))
+        self.tran_conv2.weight=torch.nn.Parameter(bilinear_kernel(21,21,32))
+    def forward(self, input):
+        pool4=self.pool4(input)
+        x=self.conv(pool4)
+        x=self.conv1(x)
+        x_up=self.tran_conv1(x)
+        x_16=self.tran_conv2(x_up+pool4)
+        return x_16
 def train_fcn():
 
     fcn=Fcn()
@@ -126,7 +143,6 @@ def pic_pred(img,tag,pred):
         plt.subplot(3,num,i)
         plt.imshow(j)
     plt.show()
-torchvision.utils.make_grid()
 def my_iou(img,tag):
     img=img.long()
     tag=tag.long()
@@ -153,7 +169,7 @@ def iou(img,tag):
         cls_iou.append(intersaction.to(torch.float).sum()/union.sum())
     average=torch.tensor(cls_iou)
     return average.mean(),average
-#model=train_fcn()
+model=train_fcn()
 #torch.save(model.state_dict(),'model')
 def picture(img,tag,de_normal=False):
     # torchvision.utils.make_grid() picture must be numpy

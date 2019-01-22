@@ -33,10 +33,11 @@ class my_data(torch.utils.data.Dataset):
         for i,j in enumerate(voc_colormap):
             tmp=(j[0]*256+j[1])*256+j[2]
             self.class_index[tmp]=i
-
     def __getitem__(self, index):
         img=image.open(self.image[index]).convert('RGB')
         target=image.open(self.mask[index]).convert('RGB')
+        # if img.size[0]< self.shape[1] or img.size[1] <self.shape[0]:
+        #     return None,None
         i,j,h,w=transforms.RandomCrop.get_params(img,self.shape)
         if i<0 or j<0 or h <0 or w<0:
             return None,None
